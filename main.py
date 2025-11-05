@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict
 import os
 from dotenv import load_dotenv
@@ -23,6 +24,29 @@ app = FastAPI(
     description="FastAPI service for OCR document processing with PaddleOCR and Supabase storage",
     version="1.0.0"
 )
+
+# Configure CORS
+# Get allowed origins from environment variable or default to all
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+if cors_origins == "*":
+    # If wildcard, can't use credentials
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # If specific origins, can use credentials
+    origins_list = [origin.strip() for origin in cors_origins.split(",")]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Initialize PaddleOCR instance (lazy initialization)
 ocr = None
@@ -257,3 +281,13 @@ async def ocr_document(
     except Exception as e:
         logger.error(f"Error processing document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True  # Set to False for production
+    )
