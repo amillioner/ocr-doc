@@ -67,12 +67,10 @@ CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
 ### Development Mode
 
 ```bash
-python main.py
-```
+# Using virtual environment (recommended)
+.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-Or using uvicorn directly:
-
-```bash
+# Or using system Python
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -86,27 +84,26 @@ The API will be available at `http://localhost:8000`
 
 ## API Endpoints
 
-### Health Check
+### OCR Document Processing
 
 ```bash
-GET /health
-```
-
-Check if the service is running and Supabase is connected.
-
-### Upload Document
-
-```bash
-POST /upload
+POST /ocr
 Content-Type: multipart/form-data
 ```
 
-Upload a document for OCR processing.
+Upload a document for OCR processing with optional parameters.
+
+**Query Parameters:**
+- `lang` (optional): Language code (e.g., 'en', 'ch', 'fr')
+- `ocr_version` (optional): OCR version ('PP-OCRv3', 'PP-OCRv4', 'PP-OCRv5')
+- `use_doc_orientation_classify` (default: false): Enable document orientation classification
+- `use_doc_unwarping` (default: false): Enable document unwarping
+- `use_textline_orientation` (default: false): Enable text line orientation classification
 
 **Example using curl:**
 
 ```bash
-curl -X POST "http://localhost:8000/upload" \
+curl -X POST "http://localhost:8000/ocr?use_doc_orientation_classify=false&use_doc_unwarping=false&use_textline_orientation=false" \
   -F "file=@/path/to/your/document.png"
 ```
 
@@ -115,35 +112,16 @@ curl -X POST "http://localhost:8000/upload" \
 ```python
 import requests
 
-url = "http://localhost:8000/upload"
+url = "http://localhost:8000/ocr"
 files = {"file": open("document.png", "rb")}
-response = requests.post(url, files=files)
+params = {
+    "use_doc_orientation_classify": False,
+    "use_doc_unwarping": False,
+    "use_textline_orientation": False
+}
+response = requests.post(url, files=files, params=params)
 print(response.json())
 ```
-
-### Get All Documents
-
-```bash
-GET /documents?limit=10&offset=0
-```
-
-Retrieve all processed documents with pagination.
-
-### Get Document by ID
-
-```bash
-GET /documents/{document_id}
-```
-
-Retrieve a specific document by its ID.
-
-### Delete Document
-
-```bash
-DELETE /documents/{document_id}
-```
-
-Delete a document from the database.
 
 ## API Documentation
 
