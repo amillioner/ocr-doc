@@ -204,6 +204,103 @@ ocr-doc/
 - Use CPU mode if GPU memory is limited
 - Consider processing documents in batches
 
+## Docker Deployment
+
+### Quick Start
+
+1. **Create `.env` file** with your configuration:
+   ```bash
+   # Copy from example (if you have .env.example)
+   # Or create manually with required variables:
+   SUPABASE_URL=your_supabase_project_url
+   SUPABASE_KEY=your_supabase_anon_key
+   PORT=8000
+   WORKERS=2
+   ```
+
+2. **Build and run with Docker Compose**:
+   ```bash
+   docker-compose up -d --build
+   ```
+
+3. **Access the API**:
+   - API: http://localhost:8000
+   - Docs: http://localhost:8000/docs
+
+### Building the Docker Image
+
+```bash
+docker build -t ocr-doc-api .
+```
+
+### Running with Docker
+
+```bash
+docker run -d \
+  --name ocr-doc-api \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  --env-file .env \
+  ocr-doc-api
+```
+
+### Using Docker Compose
+
+```bash
+# Ensure .env file exists with your configuration
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f ocr-api
+
+# Stop the service
+docker-compose down
+```
+
+### PowerShell (Windows)
+
+For Windows users, use the provided PowerShell script:
+
+```powershell
+# Build and start services
+.\docker-build.ps1 up
+
+# View logs
+.\docker-build.ps1 logs
+
+# Stop services
+.\docker-build.ps1 down
+```
+
+Or use Docker Compose directly (works in PowerShell):
+```powershell
+docker-compose up -d --build
+```
+
+See [README_DOCKER_POWERSHELL.md](README_DOCKER_POWERSHELL.md) for detailed PowerShell instructions and troubleshooting.
+
+### Deploying to Hostinger
+
+For detailed Hostinger deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
+
+**Quick Steps**:
+1. Build the Docker image: `docker build -t ocr-doc-api .`
+2. Push to a container registry (Docker Hub, etc.)
+3. In Hostinger control panel, create container from your image
+4. Set environment variables from your `.env` file
+5. Configure port mapping (Hostinger port → Container port 8000)
+
+### Docker Image Details
+
+- **Base Image**: Python 3.11-slim
+- **Working Directory**: `/app`
+- **User**: Non-root user (`appuser`) for security
+- **Port**: 8000 (configurable via `PORT` env var)
+- **Workers**: 2 (configurable via `WORKERS` env var)
+- **Health Check**: Built-in endpoint check every 30 seconds
+- **Environment**: Uses `.env` file via `--env-file` or docker-compose
+
 ## License
 
 This project is open source and available under the MIT License.
