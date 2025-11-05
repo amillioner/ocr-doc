@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+paddlepaddle>=3.0.0
+# PaddleOCR dependency groups:
+# - paddleocr: Basic OCR only (PP-OCRv5)
+# - paddleocr[doc-parser]: Document parsing (PP-StructureV3, PaddleOCR-VL)
+# - paddleocr[ie]: Information extraction (PP-ChatOCRv4)
+# - paddleocr[trans]: Document translation (PP-DocTranslation)
+# - paddleocr[all]: Complete functionality
+paddleocr[all]>=3.0.0
+supabase==2.10.0
+python-dotenv==1.0.1
+pydantic==2.9.2
+pillow==10.4.0
+python-jose[cryptography]==3.3.0
+
