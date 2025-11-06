@@ -82,76 +82,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 
 The API will be available at `http://localhost:8000`
 
-### Docker Deployment
-
-#### Using Docker Compose (Recommended)
-
-1. **Create a `.env` file** with your configuration:
-
-```env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_key
-USE_GPU=False
-OCR_LANG=en
-PORT=8000
-CORS_ORIGINS=*
-MAX_FILE_SIZE=10485760
-```
-
-2. **Build and run with Docker Compose**:
-
-```bash
-docker-compose up -d
-```
-
-3. **View logs**:
-
-```bash
-docker-compose logs -f
-```
-
-4. **Stop the service**:
-
-```bash
-docker-compose down
-```
-
-#### Using Docker directly
-
-1. **Build the Docker image**:
-
-```bash
-docker build -t ocr-doc-api .
-```
-
-2. **Run the container**:
-
-```bash
-docker run -d \
-  --name ocr-api \
-  -p 8000:8000 \
-  -e SUPABASE_URL=your_supabase_project_url \
-  -e SUPABASE_KEY=your_supabase_anon_key \
-  -e OCR_LANG=en \
-  -e USE_GPU=False \
-  ocr-doc-api
-```
-
-3. **View logs**:
-
-```bash
-docker logs -f ocr-api
-```
-
-4. **Stop the container**:
-
-```bash
-docker stop ocr-api
-docker rm ocr-api
-```
-
-The API will be available at `http://localhost:8000`
-
 ## API Endpoints
 
 ### OCR Document Processing
@@ -273,6 +203,133 @@ ocr-doc/
 - Reduce image size before upload
 - Use CPU mode if GPU memory is limited
 - Consider processing documents in batches
+
+## Docker Deployment
+
+### Quick Start
+
+1. **Create `.env` file** with your configuration:
+   ```bash
+   # Copy from example (if you have .env.example)
+   # Or create manually with required variables:
+   SUPABASE_URL=your_supabase_project_url
+   SUPABASE_KEY=your_supabase_anon_key
+   USE_GPU=False
+   OCR_LANG=en
+   PORT=8000
+   WORKERS=2
+   CORS_ORIGINS=*
+   MAX_FILE_SIZE=10485760
+   ```
+
+2. **Build and run with Docker Compose**:
+   ```bash
+   docker-compose up -d --build
+   ```
+
+3. **Access the API**:
+   - API: http://localhost:8000
+   - Docs: http://localhost:8000/docs
+
+### Building the Docker Image
+
+```bash
+docker build -t ocr-doc-api .
+```
+
+### Running with Docker
+
+#### Using Docker Compose (Recommended)
+
+```bash
+# Ensure .env file exists with your configuration
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f ocr-api
+
+# Stop the service
+docker-compose down
+```
+
+#### Using Docker directly
+
+```bash
+docker run -d \
+  --name ocr-doc-api \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  --env-file .env \
+  ocr-doc-api
+```
+
+Or with environment variables:
+
+```bash
+docker run -d \
+  --name ocr-api \
+  -p 8000:8000 \
+  -e SUPABASE_URL=your_supabase_project_url \
+  -e SUPABASE_KEY=your_supabase_anon_key \
+  -e OCR_LANG=en \
+  -e USE_GPU=False \
+  ocr-doc-api
+```
+
+**View logs**:
+```bash
+docker logs -f ocr-doc-api
+```
+
+**Stop the container**:
+```bash
+docker stop ocr-doc-api
+docker rm ocr-doc-api
+```
+
+### PowerShell (Windows)
+
+For Windows users, use the provided PowerShell script:
+
+```powershell
+# Build and start services
+.\docker-build.ps1 up
+
+# View logs
+.\docker-build.ps1 logs
+
+# Stop services
+.\docker-build.ps1 down
+```
+
+Or use Docker Compose directly (works in PowerShell):
+```powershell
+docker-compose up -d --build
+```
+
+See [README_DOCKER_POWERSHELL.md](README_DOCKER_POWERSHELL.md) for detailed PowerShell instructions and troubleshooting.
+
+### Deploying to Hostinger
+
+For detailed Hostinger deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
+
+**Quick Steps**:
+1. Build the Docker image: `docker build -t ocr-doc-api .`
+2. Push to a container registry (Docker Hub, etc.)
+3. In Hostinger control panel, create container from your image
+4. Set environment variables from your `.env` file
+5. Configure port mapping (Hostinger port → Container port 8000)
+
+### Docker Image Details
+
+- **Base Image**: Python 3.11-slim
+- **Working Directory**: `/app`
+- **User**: Non-root user (`appuser`) for security
+- **Port**: 8000 (configurable via `PORT` env var)
+- **Workers**: 2 (configurable via `WORKERS` env var)
+- **Health Check**: Built-in endpoint check every 30 seconds
+- **Environment**: Uses `.env` file via `--env-file` or docker-compose
 
 ## License
 
