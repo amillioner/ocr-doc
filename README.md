@@ -82,6 +82,76 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 
 The API will be available at `http://localhost:8000`
 
+### Docker Deployment
+
+#### Using Docker Compose (Recommended)
+
+1. **Create a `.env` file** with your configuration:
+
+```env
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
+USE_GPU=False
+OCR_LANG=en
+PORT=8000
+CORS_ORIGINS=*
+MAX_FILE_SIZE=10485760
+```
+
+2. **Build and run with Docker Compose**:
+
+```bash
+docker-compose up -d
+```
+
+3. **View logs**:
+
+```bash
+docker-compose logs -f
+```
+
+4. **Stop the service**:
+
+```bash
+docker-compose down
+```
+
+#### Using Docker directly
+
+1. **Build the Docker image**:
+
+```bash
+docker build -t ocr-doc-api .
+```
+
+2. **Run the container**:
+
+```bash
+docker run -d \
+  --name ocr-api \
+  -p 8000:8000 \
+  -e SUPABASE_URL=your_supabase_project_url \
+  -e SUPABASE_KEY=your_supabase_anon_key \
+  -e OCR_LANG=en \
+  -e USE_GPU=False \
+  ocr-doc-api
+```
+
+3. **View logs**:
+
+```bash
+docker logs -f ocr-api
+```
+
+4. **Stop the container**:
+
+```bash
+docker stop ocr-api
+docker rm ocr-api
+```
+
+The API will be available at `http://localhost:8000`
+
 ## API Endpoints
 
 ### OCR Document Processing

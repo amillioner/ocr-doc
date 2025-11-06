@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  ocr-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ocr-doc-api
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # Supabase Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      
+      # PaddleOCR Configuration
+      - USE_GPU=${USE_GPU:-False}
+      - OCR_LANG=${OCR_LANG:-en}
+      
+      # API Configuration
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - PORT=8000
+      
+      # CORS Configuration
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      
+      # File Upload Configuration
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-10485760}
+    volumes:
+      # Optional: mount a volume for persistent temp files (if needed)
+      - ocr-temp:/tmp/ocr
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  ocr-temp:
+
