@@ -11,6 +11,7 @@ from supabase import create_client, Client
 from pydantic import BaseModel
 import logging
 import numpy as np
+import base64
 
 # Load environment variables
 load_dotenv()
@@ -191,6 +192,18 @@ class UploadResponse(BaseModel):
     failed: int
     documents: List[OCRResult]
     errors: Optional[List[Dict[str, str]]] = None
+
+class SimpleDocumentResult(BaseModel):
+    document_id: str
+    filename: str
+    file_type: str
+    file_size: int
+    created_at: str
+
+class SimpleDocumentResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[SimpleDocumentResult] = None
 
 @app.post("/ocr", response_model=DocumentResponse)
 async def ocr_document(
@@ -452,6 +465,101 @@ async def upload_documents(
         documents=successful_docs,
         errors=errors if errors else None
     )
+
+@app.post("/upload-doc", response_model=SimpleDocumentResponse)
+async def upload_document_simple(
+    file: UploadFile = File(...)
+):
+    """
+    Upload a document without OCR processing.
+    Saves document metadata directly to Supabase database.
+    No OCR processing is performed - just file storage.
+    """
+    table_name = "documents"
+    allowed_extensions = {'.png', '.jpg', '.jpeg', '.pdf', '.bmp', '.tiff', '.doc', '.docx', '.txt', '.csv', '.xlsx', '.xls'}
+    
+    try:
+        logger.info(f"[UPLOAD-DOC] Starting simple document upload")
+        logger.info(f"[UPLOAD-DOC] Filename: {file.filename}")
+        
+        # Validate file extension
+        file_extension = os.path.splitext(file.filename)[1].lower()
+        if file_extension not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type {file_extension} not supported. Allowed types: {', '.join(allowed_extensions)}"
+            )
+        
+        # Read file content as binary
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        document_id = str(uuid.uuid4())
+        
+        logger.info(f"[UPLOAD-DOC] Document ID: {document_id}")
+        logger.info(f"[UPLOAD-DOC] File size: {file_size} bytes ({file_size / 1024:.2f} KB)")
+        logger.info(f"[UPLOAD-DOC] File extension: {file_extension}")
+        
+        # Convert binary to base64 for storage
+        # PostgreSQL BYTEA can store binary, but base64 is safer for JSON/API transport
+        file_binary_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        logger.info(f"[UPLOAD-DOC] File binary encoded to base64: {len(file_binary_base64)} characters")
+        
+        # Prepare data for database (no OCR, no extracted text, includes binary file)
+        document_data = {
+            "id": document_id,
+            "filename": file.filename,
+            "extracted_text": None,  # No OCR processing
+            "confidence": None,  # No OCR processing
+            "file_type": file_extension,
+            "file_size": file_size,
+            "file_data": file_binary_base64,  # Binary file data as base64
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        # Save to Supabase database
+        if supabase:
+            logger.info(f"[UPLOAD-DOC] Saving to database table '{table_name}'")
+            logger.info(f"[UPLOAD-DOC] Supabase URL: {supabase_url}")
+            
+            try:
+                result = supabase.table(table_name).insert(document_data).execute()
+                if result.data:
+                    logger.info(f"[UPLOAD-DOC] ✓ Successfully saved document to table '{table_name}'")
+                    logger.info(f"[UPLOAD-DOC] Inserted document ID: {result.data[0].get('id', document_id)}")
+                    logger.info(f"[UPLOAD-DOC] Document saved with timestamp: {result.data[0].get('created_at', 'N/A')}")
+                else:
+                    logger.error(f"[UPLOAD-DOC] ✗ Failed to save document - no data returned from insert")
+                    raise HTTPException(status_code=500, detail="Failed to save document to database")
+            except Exception as db_error:
+                logger.error(f"[UPLOAD-DOC] ✗ Database error: {str(db_error)}")
+                logger.error(f"[UPLOAD-DOC] Failed to insert into table '{table_name}'")
+                raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+        else:
+            logger.warning(f"[UPLOAD-DOC] Supabase not configured - document NOT saved to database")
+            logger.warning(f"[UPLOAD-DOC] Document would be saved to table: '{table_name}'")
+            raise HTTPException(status_code=503, detail="Database not configured")
+        
+        logger.info(f"[UPLOAD-DOC] ✓ Successfully uploaded document: {document_id}")
+        
+        return SimpleDocumentResponse(
+            success=True,
+            message="Document uploaded and saved to database successfully",
+            data=SimpleDocumentResult(
+                document_id=document_id,
+                filename=file.filename,
+                file_type=file_extension,
+                file_size=file_size,
+                created_at=document_data["created_at"]
+            )
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[UPLOAD-DOC] Error uploading document: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading document: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
