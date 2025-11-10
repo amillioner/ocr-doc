@@ -270,7 +270,8 @@ async def ocr_document(
                 "created_at": datetime.utcnow().isoformat()
             }
             
-            logger.debug(f"[OCR] Extracted {len(extracted_text.strip())} chars, {len(text_lines) if text_lines else 0} lines, confidence: {avg_confidence:.4f if avg_confidence else 'N/A'}")
+            confidence_str = f"{avg_confidence:.4f}" if avg_confidence else "N/A"
+            logger.debug(f"[OCR] Extracted {len(extracted_text.strip())} chars, {len(text_lines) if text_lines else 0} lines, confidence: {confidence_str}")
             
             # Save to Supabase if configured
             if supabase:
@@ -387,7 +388,8 @@ async def upload_documents(
             extracted_text, all_confidences, text_lines = extract_text_from_ocr_result(ocr_result)
             avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else None
             
-            logger.debug(f"[UPLOAD] File {idx} - Extracted {len(extracted_text.strip())} chars, confidence: {avg_confidence:.4f if avg_confidence else 'N/A'}")
+            confidence_str = f"{avg_confidence:.4f}" if avg_confidence else "N/A"
+            logger.debug(f"[UPLOAD] File {idx} - Extracted {len(extracted_text.strip())} chars, confidence: {confidence_str}")
             
             # Prepare data for database
             document_data = {
@@ -526,7 +528,7 @@ async def upload_document_simple(
             try:
                 result = supabase.table(table_name).insert(document_data).execute()
                 if result.data:
-                    logger.info(f"[UPLOAD-DOC] ✓ Successfully saved document to table '{table_name}'")
+                    logger.info(f"[UPLOAD-DOC] Successfully saved document to table '{table_name}'")
                     logger.info(f"[UPLOAD-DOC] Inserted document ID: {result.data[0].get('id', document_id)}")
                     logger.info(f"[UPLOAD-DOC] Document saved with timestamp: {result.data[0].get('created_at', 'N/A')}")
                 else:
@@ -541,7 +543,7 @@ async def upload_document_simple(
             logger.warning(f"[UPLOAD-DOC] Document would be saved to table: '{table_name}'")
             raise HTTPException(status_code=503, detail="Database not configured")
         
-        logger.info(f"[UPLOAD-DOC] ✓ Successfully uploaded document: {document_id}")
+        logger.info(f"[UPLOAD-DOC] Successfully uploaded document: {document_id}")
         
         return SimpleDocumentResponse(
             success=True,
