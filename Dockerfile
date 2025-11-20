@@ -1,5 +1,5 @@
-# Use Python 3.11 slim image as base
-FROM python:3.11-slim
+# Multi-stage build for OCR Document Processing API
+FROM python:3.11-slim AS base
 
 # Set working directory
 WORKDIR /app
@@ -12,40 +12,35 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    libgthread-2.0-0 \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
-
-# Copy requirements file
+# Copy requirements first for better caching
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY main.py .
 COPY config.py .
 
-# Create a non-root user for security
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+# Create directory for temporary files
+RUN mkdir -p /tmp/ocr
 
-# Switch to non-root user
-USER appuser
-
-# Expose port (default 8000, can be overridden via PORT env var)
+# Expose the port the app runs on
 EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs', timeout=5)" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')" || exit 1
 
 # Run the application
-# Use uvicorn with workers for production (Hostinger)
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WORKERS:-2} --no-access-log
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+

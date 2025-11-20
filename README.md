@@ -214,8 +214,12 @@ ocr-doc/
    # Or create manually with required variables:
    SUPABASE_URL=your_supabase_project_url
    SUPABASE_KEY=your_supabase_anon_key
+   USE_GPU=False
+   OCR_LANG=en
    PORT=8000
    WORKERS=2
+   CORS_ORIGINS=*
+   MAX_FILE_SIZE=10485760
    ```
 
 2. **Build and run with Docker Compose**:
@@ -235,16 +239,7 @@ docker build -t ocr-doc-api .
 
 ### Running with Docker
 
-```bash
-docker run -d \
-  --name ocr-doc-api \
-  --restart unless-stopped \
-  -p 8000:8000 \
-  --env-file .env \
-  ocr-doc-api
-```
-
-### Using Docker Compose
+#### Using Docker Compose (Recommended)
 
 ```bash
 # Ensure .env file exists with your configuration
@@ -256,6 +251,41 @@ docker-compose logs -f ocr-api
 
 # Stop the service
 docker-compose down
+```
+
+#### Using Docker directly
+
+```bash
+docker run -d \
+  --name ocr-doc-api \
+  --restart unless-stopped \
+  -p 8000:8000 \
+  --env-file .env \
+  ocr-doc-api
+```
+
+Or with environment variables:
+
+```bash
+docker run -d \
+  --name ocr-api \
+  -p 8000:8000 \
+  -e SUPABASE_URL=your_supabase_project_url \
+  -e SUPABASE_KEY=your_supabase_anon_key \
+  -e OCR_LANG=en \
+  -e USE_GPU=False \
+  ocr-doc-api
+```
+
+**View logs**:
+```bash
+docker logs -f ocr-doc-api
+```
+
+**Stop the container**:
+```bash
+docker stop ocr-doc-api
+docker rm ocr-doc-api
 ```
 
 ### PowerShell (Windows)
