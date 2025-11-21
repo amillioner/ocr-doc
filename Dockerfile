@@ -31,16 +31,16 @@ COPY config.py .
 RUN mkdir -p /tmp/ocr
 
 # Expose the port the app runs on
-EXPOSE 8000
+EXPOSE 8050
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV PORT=8000
+ENV PORT=8050
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8050/docs')" || exit 1
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8050"]
 

@@ -58,11 +58,11 @@
 	},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally
-	"forwardPorts": [8000],
+	"forwardPorts": [8050],
 	
 	// Port attributes for the forwarded port
 	"portsAttributes": {
-		"8000": {
+		"8050": {
 			"label": "FastAPI",
 			"onAutoForward": "notify"
 		}
@@ -80,7 +80,7 @@
 	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
 
 	// Use 'postCreateCommand' to run commands after the container is created
-	"postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt && echo 'Dev container ready! Run: uvicorn main:app --reload --host 0.0.0.0 --port 8000'",
+	"postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt && echo 'Dev container ready! Run: uvicorn main:app --reload --host 0.0.0.0 --port 8050'",
 	
 	// Use 'postStartCommand' to run commands after the container starts
 	"postStartCommand": "mkdir -p /tmp/ocr /workspace/output",

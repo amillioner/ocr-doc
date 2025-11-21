@@ -16,7 +16,7 @@ OCR_LANG = os.getenv("OCR_LANG", "en")  # Default to English, can be 'ch', 'en',
 
 # API Configuration
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", "8000"))
+API_PORT = int(os.getenv("API_PORT", "8050"))
 
 # File Upload Configuration
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB default

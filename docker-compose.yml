@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: ocr-doc-api
     ports:
-      - "${PORT:-8000}:8000"
+      - "${PORT:-8050}:8050"
     environment:
       # Supabase Configuration
       - SUPABASE_URL=${SUPABASE_URL}
@@ -19,8 +19,8 @@ services:
       
       # API Configuration
       - API_HOST=0.0.0.0
-      - API_PORT=8000
-      - PORT=8000
+      - API_PORT=8050
+      - PORT=8050
       
       # CORS Configuration
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
@@ -32,7 +32,7 @@ services:
       - ocr-temp:/tmp/ocr
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050/docs')"]
       interval: 30s
       timeout: 10s
       retries: 3
