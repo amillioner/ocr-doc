@@ -275,21 +275,19 @@ async def ocr_document(
             
             # Save to Supabase if configured
             if supabase:
-                table_name = "documents"
-                logger.debug(f"[DATABASE] Saving to table '{table_name}'")
-                
                 try:
-                    result = supabase.table(table_name).insert(document_data).execute()
+                    logger.info(f"Saving document {document_id} to Supabase")
+                    result = supabase.table("documents").insert(document_data).execute()
                     if result.data:
-                        logger.info(f"[DATABASE] Saved document {document_id} to '{table_name}'")
+                        logger.info(f"Successfully saved document {document_id} to database")
                     else:
-                        logger.error(f"[DATABASE] Failed to save document - no data returned")
+                        logger.error(f"Failed to save document to database - no data returned")
                         raise HTTPException(status_code=500, detail="Failed to save document to database")
                 except Exception as db_error:
-                    logger.error(f"[DATABASE] Database error: {str(db_error)}")
+                    logger.error(f"Database error: {str(db_error)}")
                     raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
             else:
-                logger.debug(f"[DATABASE] Supabase not configured - document not saved")
+                logger.warning("Supabase not configured - document not saved to database")
             
             logger.info(f"[OCR] Successfully processed document: {document_id}")
             
