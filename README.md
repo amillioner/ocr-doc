@@ -206,7 +206,7 @@ ocr-doc/
 
 ## Docker Deployment
 
-### Quick Start
+### Quick Start with HTTPS/SSL
 
 1. **Create `.env` file** with your configuration:
    ```bash
@@ -222,14 +222,32 @@ ocr-doc/
    MAX_FILE_SIZE=10485760
    ```
 
-2. **Build and run with Docker Compose**:
+2. **Generate SSL certificates** (for development):
+   
+   **Windows (PowerShell):**
+   ```powershell
+   .\nginx\generate-ssl-cert.ps1
+   ```
+   
+   **Linux/Mac:**
+   ```bash
+   chmod +x nginx/generate-ssl-cert.sh
+   ./nginx/generate-ssl-cert.sh
+   ```
+   
+   **For production**, see [nginx/README-SSL.md](nginx/README-SSL.md) for Let's Encrypt setup.
+
+3. **Build and run with Docker Compose**:
    ```bash
    docker-compose up -d --build
    ```
 
-3. **Access the API**:
-   - API: http://localhost:8000
-   - Docs: http://localhost:8000/docs
+4. **Access the API**:
+   - **HTTPS**: https://localhost (or https://yourdomain.com)
+   - **HTTP**: http://localhost (redirects to HTTPS)
+   - **API Docs**: https://localhost/docs
+   
+   **Note**: With self-signed certificates, browsers will show a security warning. Click "Advanced" → "Proceed" for development.
 
 ### Building the Docker Image
 
@@ -310,6 +328,26 @@ docker-compose up -d --build
 
 See [README_DOCKER_POWERSHELL.md](README_DOCKER_POWERSHELL.md) for detailed PowerShell instructions and troubleshooting.
 
+### SSL/HTTPS Configuration
+
+The application now includes NGINX as a reverse proxy with SSL/HTTPS support.
+
+**Features:**
+- ✅ Automatic HTTP to HTTPS redirect
+- ✅ SSL/TLS encryption
+- ✅ Security headers (HSTS, X-Frame-Options, etc.)
+- ✅ Support for self-signed certificates (development)
+- ✅ Support for Let's Encrypt certificates (production)
+
+**Quick Setup:**
+1. Generate SSL certificates (see step 2 in Quick Start above)
+2. NGINX will automatically proxy requests to the FastAPI app
+3. Access via HTTPS on port 443
+
+**For Production:**
+- Use Let's Encrypt for trusted certificates
+- See [nginx/README-SSL.md](nginx/README-SSL.md) for detailed instructions
+
 ### Deploying to Hostinger
 
 For detailed Hostinger deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
@@ -319,7 +357,10 @@ For detailed Hostinger deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKE
 2. Push to a container registry (Docker Hub, etc.)
 3. In Hostinger control panel, create container from your image
 4. Set environment variables from your `.env` file
-5. Configure port mapping (Hostinger port → Container port 8000)
+5. Configure port mapping:
+   - Hostinger port 80 → Container port 80 (HTTP)
+   - Hostinger port 443 → Container port 443 (HTTPS)
+6. Set up SSL certificates (see [nginx/README-SSL.md](nginx/README-SSL.md))
 
 ### Docker Image Details
 
