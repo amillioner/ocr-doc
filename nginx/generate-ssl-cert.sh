@@ -39,3 +39,8 @@ echo ""
 echo "⚠️  WARNING: This is a self-signed certificate for development only."
 echo "   Browsers will show a security warning. For production, use Let's Encrypt."
 
+
+
+
+
+

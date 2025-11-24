@@ -74,3 +74,8 @@ Write-Host ""
 Write-Host "⚠️  WARNING: This is a self-signed certificate for development only." -ForegroundColor Yellow
 Write-Host "   Browsers will show a security warning. For production, use Let's Encrypt." -ForegroundColor Yellow
 
+
+
+
+
+

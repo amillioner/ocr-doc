@@ -350,17 +350,24 @@ The application now includes NGINX as a reverse proxy with SSL/HTTPS support.
 
 ### Deploying to Hostinger
 
-For detailed Hostinger deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
+**📖 Complete Guide**: See [HOSTINGER-DEPLOYMENT.md](HOSTINGER-DEPLOYMENT.md) for detailed step-by-step instructions.
 
 **Quick Steps**:
-1. Build the Docker image: `docker build -t ocr-doc-api .`
-2. Push to a container registry (Docker Hub, etc.)
-3. In Hostinger control panel, create container from your image
-4. Set environment variables from your `.env` file
-5. Configure port mapping:
-   - Hostinger port 80 → Container port 80 (HTTP)
-   - Hostinger port 443 → Container port 443 (HTTPS)
-6. Set up SSL certificates (see [nginx/README-SSL.md](nginx/README-SSL.md))
+1. **Connect to your Hostinger VPS/Cloud server via SSH**
+2. **Install Docker and Docker Compose** (if not already installed)
+3. **Clone your repository** or upload files to the server
+4. **Create `.env` file** with your environment variables
+5. **Set up SSL certificates** (Let's Encrypt recommended for production)
+6. **Build and start services**: `docker-compose up -d --build`
+7. **Configure firewall** to allow ports 80 and 443
+8. **Point your domain** to the server IP address
+
+**Requirements**:
+- Hostinger VPS or Cloud Hosting (Docker support required)
+- Domain name pointing to your server
+- SSH access to your server
+
+**For detailed instructions**, including SSL setup, troubleshooting, and maintenance, see [HOSTINGER-DEPLOYMENT.md](HOSTINGER-DEPLOYMENT.md).
 
 ### Docker Image Details
 
