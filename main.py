@@ -1,17 +1,19 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import os
 from dotenv import load_dotenv
 from paddleocr import PaddleOCR
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from supabase import create_client, Client
 from pydantic import BaseModel
 import logging
 import numpy as np
 import base64
+import google.generativeai as genai
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -22,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="OCR Document Processing API",
-    description="FastAPI service for OCR document processing with PaddleOCR and Supabase storage",
-    version="1.0.0"
+    description="FastAPI service for OCR document processing with Google Gemini (primary) and PaddleOCR (fallback) and Supabase storage",
+    version="2.0.0"
 )
 
 # Configure CORS
@@ -49,14 +51,29 @@ else:
         allow_headers=["*"],
     )
 
-# Initialize PaddleOCR instance (lazy initialization)
+# Initialize Google Gemini
+gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
+gemini_model = None
+
+if gemini_api_key:
+    try:
+        genai.configure(api_key=gemini_api_key)
+        gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+        logger.info("Google Gemini initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Gemini: {str(e)}")
+        gemini_model = None
+else:
+    logger.warning("GEMINI_API_KEY not found. Gemini OCR will not be available.")
+
+# Initialize PaddleOCR instance (lazy initialization) - Fallback
 ocr = None
 
 def get_ocr():
-    """Lazy initialization of PaddleOCR for basic OCR"""
+    """Lazy initialization of PaddleOCR for fallback OCR"""
     global ocr
     if ocr is None:
-        logger.info("Initializing PaddleOCR...")
+        logger.info("Initializing PaddleOCR (fallback)...")
         ocr_lang = os.getenv("OCR_LANG", "en")
         ocr = PaddleOCR(
             use_doc_orientation_classify=False,
@@ -66,6 +83,52 @@ def get_ocr():
         )
         logger.info(f"PaddleOCR initialized successfully with language: {ocr_lang}")
     return ocr
+
+def extract_text_with_gemini(image_path: str) -> Tuple[str, float, List[Dict]]:
+    """
+    Extract text from image using Google Gemini Vision API.
+    Returns: (extracted_text, confidence, text_lines)
+    """
+    try:
+        if not gemini_model:
+            raise Exception("Gemini model not initialized")
+        
+        logger.info("[GEMINI] Starting OCR with Google Gemini...")
+        
+        # Load image
+        image = Image.open(image_path)
+        
+        # Use Gemini to extract text
+        prompt = """Extract all text from this image. Return the text exactly as it appears, preserving line breaks and formatting. 
+        If there are multiple sections, separate them with line breaks. 
+        Be accurate and include all visible text."""
+        
+        response = gemini_model.generate_content([prompt, image])
+        
+        extracted_text = response.text.strip() if response.text else ""
+        
+        # Gemini doesn't provide confidence scores, so we'll use a default high confidence
+        confidence = 0.95  # High confidence for Gemini results
+        
+        # Create text lines from extracted text
+        text_lines = []
+        if extracted_text:
+            lines = extracted_text.split('\n')
+            for i, line in enumerate(lines):
+                if line.strip():  # Only add non-empty lines
+                    text_lines.append({
+                        'text': line.strip(),
+                        'confidence': confidence,
+                        'line_number': i + 1
+                    })
+        
+        logger.info(f"[GEMINI] Successfully extracted {len(extracted_text)} characters, {len(text_lines)} lines")
+        
+        return extracted_text, confidence, text_lines
+        
+    except Exception as e:
+        logger.error(f"[GEMINI] Error extracting text with Gemini: {str(e)}")
+        raise Exception(f"Gemini OCR failed: {str(e)}")
 
 def convert_to_json_serializable(obj):
     """Convert numpy arrays and other non-serializable types to JSON-serializable formats"""
@@ -240,24 +303,51 @@ async def ocr_document(
             logger.debug(f"[OCR] Temporary file: {temp_file_path}")
         
         try:
+            # Try Gemini first, fallback to PaddleOCR
+            extracted_text = ""
+            all_confidences = []
+            text_lines = []
+            ocr_method = None
             
-            # Initialize OCR with custom parameters if provided
-            ocr_instance = get_ocr()
+            # Attempt Gemini OCR first
+            if gemini_model:
+                try:
+                    logger.info("[OCR] Attempting OCR with Google Gemini...")
+                    extracted_text, confidence, text_lines = extract_text_with_gemini(temp_file_path)
+                    all_confidences = [confidence] * len(text_lines) if text_lines else [confidence]
+                    avg_confidence = confidence
+                    ocr_method = "gemini"
+                    logger.info("[OCR] Successfully extracted text using Google Gemini")
+                except Exception as gemini_error:
+                    logger.warning(f"[OCR] Gemini OCR failed: {str(gemini_error)}")
+                    logger.info("[OCR] Falling back to PaddleOCR...")
+                    # Fall through to PaddleOCR
             
-            # Use predict() with optional parameters
-            ocr_result_raw = ocr_instance.predict(
-                temp_file_path,
-                use_doc_orientation_classify=use_doc_orientation_classify,
-                use_doc_unwarping=use_doc_unwarping,
-                use_textline_orientation=use_textline_orientation
-            )
+            # Fallback to PaddleOCR if Gemini failed or not available
+            if not extracted_text or ocr_method != "gemini":
+                logger.info("[OCR] Using PaddleOCR (fallback)...")
+                ocr_instance = get_ocr()
+                
+                # Use predict() with optional parameters
+                ocr_result_raw = ocr_instance.predict(
+                    temp_file_path,
+                    use_doc_orientation_classify=use_doc_orientation_classify,
+                    use_doc_unwarping=use_doc_unwarping,
+                    use_textline_orientation=use_textline_orientation
+                )
+                
+                # Convert entire result to JSON-serializable format first
+                ocr_result = convert_to_json_serializable(ocr_result_raw)
+                
+                # Extract text from result
+                extracted_text, all_confidences, text_lines = extract_text_from_ocr_result(ocr_result)
+                avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else None
+                ocr_method = "paddleocr"
+                logger.info("[OCR] Successfully extracted text using PaddleOCR")
             
-            # Convert entire result to JSON-serializable format first
-            ocr_result = convert_to_json_serializable(ocr_result_raw)
-            
-            # Extract text from result
-            extracted_text, all_confidences, text_lines = extract_text_from_ocr_result(ocr_result)
-            avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else None
+            # If both methods failed
+            if not extracted_text:
+                raise Exception("Both Gemini and PaddleOCR failed to extract text")
             
             # Prepare data for Supabase
             document_data = {
@@ -267,11 +357,12 @@ async def ocr_document(
                 "confidence": avg_confidence,
                 "file_type": file_extension,
                 "file_size": file_size,
-                "created_at": datetime.utcnow().isoformat()
+                "ocr_method": ocr_method,  # Track which OCR method was used
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
             
             confidence_str = f"{avg_confidence:.4f}" if avg_confidence else "N/A"
-            logger.debug(f"[OCR] Extracted {len(extracted_text.strip())} chars, {len(text_lines) if text_lines else 0} lines, confidence: {confidence_str}")
+            logger.info(f"[OCR] Extracted {len(extracted_text.strip())} chars, {len(text_lines) if text_lines else 0} lines, confidence: {confidence_str}, method: {ocr_method}")
             
             # Save to Supabase if configured
             if supabase:
@@ -372,19 +463,47 @@ async def upload_documents(
                 temp_file_path = temp_file.name
                 temp_files.append(temp_file_path)
                 logger.debug(f"[UPLOAD] File {idx} - Temp file: {temp_file_path}")
-            ocr_instance = get_ocr()
+            # Try Gemini first, fallback to PaddleOCR
+            extracted_text = ""
+            all_confidences = []
+            text_lines = []
+            ocr_method = None
             
-            ocr_result_raw = ocr_instance.predict(
-                temp_file_path,
-                use_doc_orientation_classify=use_doc_orientation_classify,
-                use_doc_unwarping=use_doc_unwarping,
-                use_textline_orientation=use_textline_orientation
-            )
+            # Attempt Gemini OCR first
+            if gemini_model:
+                try:
+                    logger.info(f"[UPLOAD] File {idx} - Attempting OCR with Google Gemini...")
+                    extracted_text, confidence, text_lines = extract_text_with_gemini(temp_file_path)
+                    all_confidences = [confidence] * len(text_lines) if text_lines else [confidence]
+                    avg_confidence = confidence
+                    ocr_method = "gemini"
+                    logger.info(f"[UPLOAD] File {idx} - Successfully extracted text using Google Gemini")
+                except Exception as gemini_error:
+                    logger.warning(f"[UPLOAD] File {idx} - Gemini OCR failed: {str(gemini_error)}")
+                    logger.info(f"[UPLOAD] File {idx} - Falling back to PaddleOCR...")
             
-            # Convert and extract text
-            ocr_result = convert_to_json_serializable(ocr_result_raw)
-            extracted_text, all_confidences, text_lines = extract_text_from_ocr_result(ocr_result)
-            avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else None
+            # Fallback to PaddleOCR if Gemini failed or not available
+            if not extracted_text or ocr_method != "gemini":
+                logger.info(f"[UPLOAD] File {idx} - Using PaddleOCR (fallback)...")
+                ocr_instance = get_ocr()
+                
+                ocr_result_raw = ocr_instance.predict(
+                    temp_file_path,
+                    use_doc_orientation_classify=use_doc_orientation_classify,
+                    use_doc_unwarping=use_doc_unwarping,
+                    use_textline_orientation=use_textline_orientation
+                )
+                
+                # Convert and extract text
+                ocr_result = convert_to_json_serializable(ocr_result_raw)
+                extracted_text, all_confidences, text_lines = extract_text_from_ocr_result(ocr_result)
+                avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else None
+                ocr_method = "paddleocr"
+                logger.info(f"[UPLOAD] File {idx} - Successfully extracted text using PaddleOCR")
+            
+            # If both methods failed
+            if not extracted_text:
+                raise Exception("Both Gemini and PaddleOCR failed to extract text")
             
             confidence_str = f"{avg_confidence:.4f}" if avg_confidence else "N/A"
             logger.debug(f"[UPLOAD] File {idx} - Extracted {len(extracted_text.strip())} chars, confidence: {confidence_str}")
@@ -397,7 +516,8 @@ async def upload_documents(
                 "confidence": avg_confidence,
                 "file_type": file_extension,
                 "file_size": file_size,
-                "created_at": datetime.utcnow().isoformat()
+                "ocr_method": ocr_method,  # Track which OCR method was used
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
             
             # Save to database

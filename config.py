@@ -10,7 +10,10 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-# PaddleOCR Configuration
+# Google Gemini Configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
+
+# PaddleOCR Configuration (Fallback)
 USE_GPU = os.getenv("USE_GPU", "False").lower() == "true"
 OCR_LANG = os.getenv("OCR_LANG", "en")  # Default to English, can be 'ch', 'en', 'fr', etc.
 

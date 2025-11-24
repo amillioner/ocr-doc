@@ -18,9 +18,15 @@ def generate_ssl_certificates():
     """Generate self-signed SSL certificate and private key"""
     
     ssl_dir = Path("nginx/ssl")
-    domain = os.getenv("DOMAIN", "localhost")
     
-    print(f"Generating self-signed SSL certificate for {domain}...")
+    # Get domain/IP from environment or command line argument
+    import sys
+    if len(sys.argv) > 1:
+        domain_or_ip = sys.argv[1]
+    else:
+        domain_or_ip = os.getenv("DOMAIN", "localhost")
+    
+    print(f"Generating self-signed SSL certificate for {domain_or_ip}...")
     
     # Create SSL directory if it doesn't exist
     ssl_dir.mkdir(parents=True, exist_ok=True)
@@ -39,16 +45,28 @@ def generate_ssl_certificates():
         x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "State"),
         x509.NameAttribute(NameOID.LOCALITY_NAME, "City"),
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Organization"),
-        x509.NameAttribute(NameOID.COMMON_NAME, domain),
+        x509.NameAttribute(NameOID.COMMON_NAME, domain_or_ip),
     ])
     
     # Create Subject Alternative Names
-    san_list = [
-        x509.DNSName(domain),
-        x509.DNSName(f"*.{domain}"),
-        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
-        x509.IPAddress(ipaddress.IPv6Address("::1")),
-    ]
+    # Check if it's an IP address or domain name
+    try:
+        # Try to parse as IP address
+        ip_addr = ipaddress.ip_address(domain_or_ip)
+        # It's an IP address
+        san_list = [
+            x509.IPAddress(ip_addr),
+            x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+            x509.IPAddress(ipaddress.IPv6Address("::1")),
+        ]
+    except ValueError:
+        # It's a domain name
+        san_list = [
+            x509.DNSName(domain_or_ip),
+            x509.DNSName(f"*.{domain_or_ip}"),
+            x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+            x509.IPAddress(ipaddress.IPv6Address("::1")),
+        ]
     
     cert = x509.CertificateBuilder().subject_name(
         subject
