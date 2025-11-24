@@ -12,6 +12,7 @@ from pydantic import BaseModel
 import logging
 import numpy as np
 import base64
+import json
 import google.generativeai as genai
 from PIL import Image
 
@@ -170,6 +171,63 @@ def convert_to_json_serializable(obj):
     else:
         return obj
 
+def extract_insurance_info(extracted_text: str) -> Dict:
+    """
+    Extract insurance information from OCR text using Google Gemini AI.
+    Returns a dictionary with insurance fields.
+    """
+    try:
+        if not gemini_model:
+            logger.warning("[INSURANCE] Gemini model not available for insurance extraction")
+            return {}
+        
+        if not extracted_text or len(extracted_text.strip()) < 10:
+            logger.warning("[INSURANCE] Insufficient text for insurance extraction")
+            return {}
+        
+        logger.info("[INSURANCE] Extracting insurance information using Gemini AI...")
+        
+        prompt = """Extract insurance information from the following text extracted from an insurance card or document.
+        
+Return ONLY a valid JSON object with the following structure. If a field is not found, use null or empty string:
+{
+  "firstName": "first name if found",
+  "lastName": "last name if found",
+  "insuranceProvider": "insurance company/provider name",
+  "policyNumber": "policy number or member ID",
+  "groupNumber": "group number if found",
+  "subscriberName": "subscriber name on the card",
+  "phoneNumber": "phone number if found",
+  "email": "email if found"
+}
+
+Text to analyze:
+""" + extracted_text[:2000]  # Limit text to avoid token limits
+        
+        response = gemini_model.generate_content(prompt)
+        
+        # Parse JSON from response
+        response_text = response.text.strip()
+        
+        # Try to extract JSON from markdown code blocks if present
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        try:
+            insurance_data = json.loads(response_text)
+            logger.info(f"[INSURANCE] Successfully extracted insurance info: {insurance_data}")
+            return insurance_data
+        except json.JSONDecodeError as e:
+            logger.warning(f"[INSURANCE] Failed to parse JSON from Gemini response: {str(e)}")
+            logger.debug(f"[INSURANCE] Response text: {response_text[:200]}")
+            return {}
+            
+    except Exception as e:
+        logger.error(f"[INSURANCE] Error extracting insurance info: {str(e)}")
+        return {}
+
 def extract_text_from_ocr_result(ocr_result: List[Dict]) -> tuple:
     """
     Extract text and confidence scores from PaddleOCR predict() result.
@@ -234,6 +292,16 @@ else:
     logger.warning("Supabase not configured. SUPABASE_URL and SUPABASE_KEY not set in environment variables")
 
 # Pydantic models
+class InsuranceInfo(BaseModel):
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    insuranceProvider: Optional[str] = None
+    policyNumber: Optional[str] = None
+    groupNumber: Optional[str] = None
+    subscriberName: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    email: Optional[str] = None
+
 class OCRResult(BaseModel):
     document_id: str
     filename: str
@@ -241,6 +309,7 @@ class OCRResult(BaseModel):
     confidence: Optional[float] = None
     text_lines: Optional[List[Dict]] = None
     created_at: str
+    insurance_info: Optional[InsuranceInfo] = None
 
 class DocumentResponse(BaseModel):
     success: bool
@@ -349,6 +418,16 @@ async def ocr_document(
             if not extracted_text:
                 raise Exception("Both Gemini and PaddleOCR failed to extract text")
             
+            # Extract insurance information from OCR text
+            insurance_info_dict = extract_insurance_info(extracted_text.strip())
+            insurance_info_obj = None
+            if insurance_info_dict:
+                try:
+                    insurance_info_obj = InsuranceInfo(**insurance_info_dict)
+                except Exception as e:
+                    logger.warning(f"[OCR] Failed to create InsuranceInfo object: {str(e)}")
+                    insurance_info_obj = None
+            
             # Prepare data for Supabase
             document_data = {
                 "id": document_id,
@@ -361,8 +440,16 @@ async def ocr_document(
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             
+            # Add insurance fields to document_data
+            if insurance_info_dict:
+                document_data["first_name"] = insurance_info_dict.get("firstName")
+                document_data["last_name"] = insurance_info_dict.get("lastName")
+                document_data["insurance_info_details"] = insurance_info_dict
+            
             confidence_str = f"{avg_confidence:.4f}" if avg_confidence else "N/A"
             logger.info(f"[OCR] Extracted {len(extracted_text.strip())} chars, {len(text_lines) if text_lines else 0} lines, confidence: {confidence_str}, method: {ocr_method}")
+            if insurance_info_dict:
+                logger.info(f"[OCR] Extracted insurance info: {insurance_info_dict}")
             
             # Save to Supabase if configured
             if supabase:
@@ -396,7 +483,8 @@ async def ocr_document(
                     extracted_text=extracted_text.strip(),
                     confidence=float(avg_confidence) if avg_confidence is not None else None,
                     text_lines=serializable_text_lines,
-                    created_at=document_data["created_at"]
+                    created_at=document_data["created_at"],
+                    insurance_info=insurance_info_obj
                 )
             )
             
@@ -505,8 +593,20 @@ async def upload_documents(
             if not extracted_text:
                 raise Exception("Both Gemini and PaddleOCR failed to extract text")
             
+            # Extract insurance information from OCR text
+            insurance_info_dict = extract_insurance_info(extracted_text.strip())
+            insurance_info_obj = None
+            if insurance_info_dict:
+                try:
+                    insurance_info_obj = InsuranceInfo(**insurance_info_dict)
+                except Exception as e:
+                    logger.warning(f"[UPLOAD] File {idx} - Failed to create InsuranceInfo object: {str(e)}")
+                    insurance_info_obj = None
+            
             confidence_str = f"{avg_confidence:.4f}" if avg_confidence else "N/A"
             logger.debug(f"[UPLOAD] File {idx} - Extracted {len(extracted_text.strip())} chars, confidence: {confidence_str}")
+            if insurance_info_dict:
+                logger.info(f"[UPLOAD] File {idx} - Extracted insurance info: {insurance_info_dict}")
             
             # Prepare data for database
             document_data = {
@@ -519,6 +619,12 @@ async def upload_documents(
                 "ocr_method": ocr_method,  # Track which OCR method was used
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
+            
+            # Add insurance fields to document_data
+            if insurance_info_dict:
+                document_data["first_name"] = insurance_info_dict.get("firstName")
+                document_data["last_name"] = insurance_info_dict.get("lastName")
+                document_data["insurance_info_details"] = insurance_info_dict
             
             # Save to database
             if supabase:
@@ -548,7 +654,8 @@ async def upload_documents(
                 extracted_text=extracted_text.strip(),
                 confidence=float(avg_confidence) if avg_confidence is not None else None,
                 text_lines=serializable_text_lines,
-                created_at=document_data["created_at"]
+                created_at=document_data["created_at"],
+                insurance_info=insurance_info_obj
             ))
             
             logger.debug(f"[UPLOAD] File {idx} - Successfully processed")
@@ -680,6 +787,104 @@ async def upload_document_simple(
     except Exception as e:
         logger.error(f"[UPLOAD-DOC] Error uploading document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error uploading document: {str(e)}")
+
+class InsuranceUpdateRequest(BaseModel):
+    document_id: str
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    email: Optional[str] = None
+    insuranceProvider: Optional[str] = None
+    policyNumber: Optional[str] = None
+    groupNumber: Optional[str] = None
+    subscriberName: Optional[str] = None
+    message: Optional[str] = None
+
+class InsuranceUpdateResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[Dict] = None
+
+@app.put("/insurance/update", response_model=InsuranceUpdateResponse)
+async def update_insurance_info(request: InsuranceUpdateRequest):
+    """
+    Update insurance information for a document (upsert operation).
+    This endpoint allows the UI to update insurance fields after user review.
+    """
+    try:
+        if not supabase:
+            raise HTTPException(status_code=503, detail="Database not configured")
+        
+        logger.info(f"[INSURANCE-UPDATE] Updating insurance info for document: {request.document_id}")
+        
+        # Prepare update data
+        update_data = {}
+        
+        if request.firstName is not None:
+            update_data["first_name"] = request.firstName
+        if request.lastName is not None:
+            update_data["last_name"] = request.lastName
+        
+        # Prepare insurance_info_details JSON
+        insurance_details = {}
+        if request.phoneNumber is not None:
+            insurance_details["phoneNumber"] = request.phoneNumber
+        if request.email is not None:
+            insurance_details["email"] = request.email
+        if request.insuranceProvider is not None:
+            insurance_details["insuranceProvider"] = request.insuranceProvider
+        if request.policyNumber is not None:
+            insurance_details["policyNumber"] = request.policyNumber
+        if request.groupNumber is not None:
+            insurance_details["groupNumber"] = request.groupNumber
+        if request.subscriberName is not None:
+            insurance_details["subscriberName"] = request.subscriberName
+        if request.message is not None:
+            insurance_details["message"] = request.message
+        
+        # Merge with existing insurance_info_details if present
+        if insurance_details:
+            # First, get existing document to merge with existing insurance_info_details
+            try:
+                existing = supabase.table("documents").select("insurance_info_details").eq("id", request.document_id).execute()
+                if existing.data and existing.data[0].get("insurance_info_details"):
+                    existing_details = existing.data[0]["insurance_info_details"]
+                    if isinstance(existing_details, dict):
+                        insurance_details = {**existing_details, **insurance_details}
+            except Exception as e:
+                logger.warning(f"[INSURANCE-UPDATE] Could not fetch existing insurance details: {str(e)}")
+            
+            update_data["insurance_info_details"] = insurance_details
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        
+        # Perform upsert (update if exists, insert if not - though insert shouldn't happen for existing document)
+        try:
+            result = supabase.table("documents").update(update_data).eq("id", request.document_id).execute()
+            
+            if result.data:
+                logger.info(f"[INSURANCE-UPDATE] Successfully updated insurance info for document {request.document_id}")
+                return InsuranceUpdateResponse(
+                    success=True,
+                    message="Insurance information updated successfully",
+                    data=result.data[0]
+                )
+            else:
+                # Document might not exist
+                raise HTTPException(status_code=404, detail=f"Document with ID {request.document_id} not found")
+                
+        except HTTPException:
+            raise
+        except Exception as db_error:
+            logger.error(f"[INSURANCE-UPDATE] Database error: {str(db_error)}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(db_error)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[INSURANCE-UPDATE] Error updating insurance info: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating insurance info: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
