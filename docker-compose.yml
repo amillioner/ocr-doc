@@ -47,8 +47,8 @@ services:
       dockerfile: nginx/Dockerfile
     container_name: ocr-nginx
     ports:
-      - "80:80"   # HTTP - redirects to HTTPS
-      - "443:443" # HTTPS
+      - "8384:80"   # HTTP - redirects to HTTPS
+      - "8443:443" # HTTPS
     volumes:
       - certbot-data:/var/www/certbot:ro
     depends_on:
